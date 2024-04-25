@@ -1,0 +1,152 @@
+# Terraform PLAN Pipeline configuration
+
+parameters:
+- name: environment
+  displayName: Environment OneManITArmy
+  type: string
+  values:
+  - dev
+  - test
+  - acc
+  - prod
+
+# Create if statement to decide which environment Terraform needs to deploy.
+variables:
+  ${{ if eq(parameters.environment, 'dev') }}:
+    serviceConnectionName: "onemanitarmy dev service connection"         # Specify service connection name in Azure DevOps project settings.
+    workingDirectory: '$(System.DefaultWorkingDirectory)'            # Specify working directory of your Terraform files.
+    varFile: "$(System.DefaultWorkingDirectory)/env-tfvars/${{ parameters.environment }}.tfvars"
+    backendResourceGroupName: "rg-onemanitarmy-tfstate"              # Specify RG-name that is created via Terraform where Storage account is held.
+    backendStorageAccountName: "stonemanitarmy"                      # Specify name of the Storage account is that created.
+    backendContainerName: "tfstate"                                  # Specify name of blob container in Storage account.
+    backendKey: "stonemanitarmydevai.terraform.tfstate"                 # Specify filename mentioned in blob container above.
+  ${{ if eq(parameters.environment, 'test') }}:
+    serviceConnectionName: "onemanitarmy test service connection"         
+    workingDirectory: '$(System.DefaultWorkingDirectory)'            
+    varFile: "$(System.DefaultWorkingDirectory)/env-tfvars/${{ parameters.environment }}.tfvars"
+    backendResourceGroupName: "rg-onemanitarmy-tfstate"              
+    backendStorageAccountName: "stonemanitarmy"                      
+    backendContainerName: "tfstate"                                  
+    backendKey: "stonemanitarmytestai.terraform.tfstate"  
+  ${{ if eq(parameters.environment, 'acc') }}:
+    serviceConnectionName: "onemanitarmy acc service connection"         
+    workingDirectory: '$(System.DefaultWorkingDirectory)'            
+    varFile: "$(System.DefaultWorkingDirectory)/env-tfvars/${{ parameters.environment }}.tfvars"
+    backendResourceGroupName: "rg-onemanitarmy-tfstate"              
+    backendStorageAccountName: "stonemanitarmy"                      
+    backendContainerName: "tfstate"                                  
+    backendKey: "stonemanitarmyaccai.terraform.tfstate"
+  ${{ if eq(parameters.environment, 'prod') }}:
+    serviceConnectionName: "onemanitarmy prod service connection"         
+    workingDirectory: '$(System.DefaultWorkingDirectory)'            
+    varFile: "$(System.DefaultWorkingDirectory)/env-tfvars/${{ parameters.environment }}.tfvars"
+    backendResourceGroupName: "rg-onemanitarmy-tfstate"              
+    backendStorageAccountName: "stonemanitarmy"                      
+    backendContainerName: "tfstate"                                  
+    backendKey: "stonemanitarmyprodai.terraform.tfstate"   
+
+trigger:
+  - none
+
+pool:
+  vmImage: "ubuntu-latest"
+
+stages:
+
+  # Performs Terraform Init, Validate, and Plan.
+  - stage: applicationinsights
+    jobs:
+    - job: validate
+      continueOnError: false
+      steps:
+
+        # Powershell task to enable Storage Account public access so .tfstate file can be opened and modified.
+        - task: AzurePowerShell@5
+          displayName: 'Temporarily Allow Public Network Access to Terraform Backend Storage Account'
+          inputs:
+            azureSubscription: '$(serviceConnectionName)'
+            ScriptType: 'InlineScript'
+            Inline: |
+              # Enable Public Network Access
+              Set-AzStorageAccount -ResourceGroupName "$(backendResourceGroupName)" -Name "$(backendStorageAccountName)" -PublicNetworkAccess Enabled
+              Update-AzStorageAccountNetworkRuleSet -ResourceGroupName "$(backendResourceGroupName)" -Name "$(backendStorageAccountName)" -DefaultAction Allow
+              Start-Sleep -Seconds 60
+            azurePowerShellVersion: 'LatestVersion'
+
+        # Perform Terraform Init
+        - task: TerraformTaskV2@2
+          displayName: "init"
+          inputs:
+            provider: "azurerm"
+            command: "init"
+            workingDirectory: "$(workingDirectory)"
+            backendServiceArm: "$(serviceConnectionName)"
+            backendAzureRmResourceGroupName: "$(backendResourceGroupName)"
+            backendAzureRmStorageAccountName: "$(backendStorageAccountName)"
+            backendAzureRmContainerName: "$(backendContainerName)"
+            backendAzureRmKey: "$(backendKey)"
+
+        # Perform Terraform Validate    
+        - task: TerraformTaskV2@2
+          inputs:
+            provider: "azurerm"
+            command: "validate"
+    
+    # Perform Terraform Init
+    - deployment: plan_terraform
+      dependsOn: validate
+      continueOnError: false
+      environment: "gen-terraform-env"
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - checkout: self
+              - task: TerraformTaskV2@2
+                displayName: "init"
+                inputs:
+                  provider: "azurerm"
+                  command: "init"
+                  workingDirectory: "$(workingDirectory)"
+                  backendServiceArm: "$(serviceConnectionName)"
+                  backendAzureRmResourceGroupName: "$(backendResourceGroupName)"
+                  backendAzureRmStorageAccountName: "$(backendStorageAccountName)"
+                  backendAzureRmContainerName: "$(backendContainerName)"
+                  backendAzureRmKey: "$(backendKey)"
+
+              # Perform Terraform Plan    
+              - task: TerraformTaskV2@2
+                displayName: "plan"
+                inputs:
+                  provider: "azurerm"
+                  command: "plan"
+                  workingDirectory: "$(workingDirectory)"
+                  commandOptions: '-var-file="$(varFile)" -var="backendResourceGroupName=$(backendResourceGroupName)" -var="backendStorageAccountName=$(backendStorageAccountName)" -var="backendContainerName=$(backendContainerName)" -var="backendKey=$(backendKey)"'
+                  environmentServiceNameAzureRM: "$(serviceConnectionName)"
+
+              # Powershell job to disable Storage Account public access so .tfstate file is secured.     
+              - task: AzurePowerShell@5
+                displayName: 'Disable Public Network Access to Terraform Backend Storage Account'
+                inputs:
+                  azureSubscription: '$(serviceConnectionName)'
+                  ScriptType: 'InlineScript'
+                  Inline: |
+                    # Disable Public Network Access
+                    Set-AzStorageAccount -ResourceGroupName "$(backendResourceGroupName)" -Name "$(backendStorageAccountName)" -PublicNetworkAccess Disabled
+                  azurePowerShellVersion: 'LatestVersion'  
+    
+    # Error handling
+    - job: catch_failed_plan
+      dependsOn: plan_terraform
+      condition: failed()
+      continueOnError: false
+      steps:
+        - task: AzurePowerShell@5
+          displayName: 'Disable Public Network Access to Terraform Backend Storage Account'
+          inputs:
+            azureSubscription: '$(serviceConnectionName)'
+            ScriptType: 'InlineScript'
+            Inline: |
+              # Disable Public Network Access
+              Set-AzStorageAccount -ResourceGroupName "$(backendResourceGroupName)" -Name "$(backendStorageAccountName)" -PublicNetworkAccess Disabled
+            azurePowerShellVersion: 'LatestVersion'
