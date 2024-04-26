@@ -16,34 +16,34 @@ variables:
     serviceConnectionName: "onemanitarmy dev service connection"         # Specify service connection name in Azure DevOps project settings.
     workingDirectory: '$(System.DefaultWorkingDirectory)'            # Specify working directory of your Terraform files.
     varFile: "$(System.DefaultWorkingDirectory)/env-tfvars/${{ parameters.environment }}.tfvars"
-    backendResourceGroupName: "rg-onemanitarmy-tfstate"              # Specify RG-name that is created via Terraform where Storage account is held.
-    backendStorageAccountName: "stonemanitarmy"                      # Specify name of the Storage account is that created.
-    backendContainerName: "tfstate"                                  # Specify name of blob container in Storage account.
-    backendKey: "stonemanitarmydevai.terraform.tfstate"                 # Specify filename mentioned in blob container above.
+    backendResourceGroupName: "<your tfstate resource group name>"              # Specify RG-name that is created via Terraform where Storage account is held.
+    backendStorageAccountName: "<your existing storage account name>"                        # Specify name of the Storage account is that created.
+    backendContainerName: "<your tfstate blob container name>"                                  # Specify name of blob container in Storage account.
+    backendKey: "<your tfstate backendkey name>.terraform.tfstate"                 # Specify filename mentioned in blob container above.
   ${{ if eq(parameters.environment, 'test') }}:
     serviceConnectionName: "onemanitarmy test service connection"         
     workingDirectory: '$(System.DefaultWorkingDirectory)'            
     varFile: "$(System.DefaultWorkingDirectory)/env-tfvars/${{ parameters.environment }}.tfvars"
-    backendResourceGroupName: "rg-onemanitarmy-tfstate"              
-    backendStorageAccountName: "stonemanitarmy"                      
-    backendContainerName: "tfstate"                                  
-    backendKey: "stonemanitarmytestai.terraform.tfstate"  
+    backendResourceGroupName: "<your tfstate resource group name>"              
+    backendStorageAccountName: "<your existing storage account name>"                        
+    backendContainerName: "<your tfstate blob container name>"                                  
+    backendKey: "<your tfstate backendkey name>.terraform.tfstate" 
   ${{ if eq(parameters.environment, 'acc') }}:
     serviceConnectionName: "onemanitarmy acc service connection"         
     workingDirectory: '$(System.DefaultWorkingDirectory)'            
     varFile: "$(System.DefaultWorkingDirectory)/env-tfvars/${{ parameters.environment }}.tfvars"
-    backendResourceGroupName: "rg-onemanitarmy-tfstate"              
-    backendStorageAccountName: "stonemanitarmy"                      
-    backendContainerName: "tfstate"                                  
-    backendKey: "stonemanitarmyaccai.terraform.tfstate"
+    backendResourceGroupName: "<your tfstate resource group name>"              
+    backendStorageAccountName: "<your existing storage account name>"                        
+    backendContainerName: "<your tfstate blob container name>"                                  
+    backendKey: "<your tfstate backendkey name>.terraform.tfstate"
   ${{ if eq(parameters.environment, 'prod') }}:
     serviceConnectionName: "onemanitarmy prod service connection"         
     workingDirectory: '$(System.DefaultWorkingDirectory)'            
     varFile: "$(System.DefaultWorkingDirectory)/env-tfvars/${{ parameters.environment }}.tfvars"
-    backendResourceGroupName: "rg-onemanitarmy-tfstate"              
-    backendStorageAccountName: "stonemanitarmy"                      
-    backendContainerName: "tfstate"                                  
-    backendKey: "stonemanitarmyprodai.terraform.tfstate"   
+    backendResourceGroupName: "<your tfstate resource group name>"              
+    backendStorageAccountName: "<your existing storage account name>"                        
+    backendContainerName: "<your tfstate blob container name>"                                  
+    backendKey: "<your tfstate backendkey name>.terraform.tfstate"  
 
 trigger:
   - none
